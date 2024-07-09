@@ -30,13 +30,27 @@ class get_model(nn.Module):
         return x, trans_feat
 
 class get_loss(torch.nn.Module):
-    def __init__(self, mat_diff_loss_scale=0.001):
+    def __init__(self, mat_diff_loss_scale=0):
         super(get_loss, self).__init__()
         self.mat_diff_loss_scale = mat_diff_loss_scale
 
+    def convert_xywh_to_xyxy_bbox(self, boxes):
+        x, y, w, h = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
+        x1 = x
+        y1 = y
+        x2 = x + w
+        y2 = y + h
+
+        return torch.stack([x1, y1, x2, y2], dim=1)
+
     def forward(self, pred, target, trans_feat):
-        loss = generalized_box_iou_loss(pred, target)
+
+        pred = self.convert_xywh_to_xyxy_bbox(pred)
+        target = self.convert_xywh_to_xyxy_bbox(target)
+
+        loss = generalized_box_iou_loss(pred, target, reduction='mean')
         mat_diff_loss = feature_transform_reguliarzer(trans_feat)
 
         total_loss = loss + mat_diff_loss * self.mat_diff_loss_scale
+        print(total_loss)
         return total_loss
