@@ -1,5 +1,8 @@
 import numpy as np
 
+from data_utils.rapidata_drawing import POINTS_DIM
+
+
 def normalize_data(batch_data):
     """ Normalize the batch data, use coordinates of the block centered at origin,
         Input:
@@ -219,7 +222,7 @@ def shift_point_cloud(batch_data, shift_range=0.1):
           BxNx3 array, shifted batch of point clouds
     """
     B, N, C = batch_data.shape
-    shifts = np.random.uniform(-shift_range, shift_range, (B,3))
+    shifts = np.random.uniform(-shift_range, shift_range, (B,POINTS_DIM))
     for batch_index in range(B):
         batch_data[batch_index,:,:] += shifts[batch_index,:]
     return batch_data
