@@ -22,7 +22,6 @@ import argparse
 
 from pathlib import Path
 from tqdm import tqdm
-from data_utils.ModelNetDataLoader import ModelNetDataLoader
 from data_utils.rapidata_drawing import LineRapidDataset, POINTS_DIM
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -36,7 +35,7 @@ def parse_args():
     parser.add_argument('--gpu', type=str, default='0', help='specify gpu device')
     parser.add_argument('--batch_size', type=int, default=32, help='batch size in training')
     parser.add_argument('--model', default='pointnet_cls_bbox', help='model name [default: pointnet_cls]')
-    parser.add_argument('--epoch', default=300, type=int, help='number of epoch in training')
+    parser.add_argument('--epoch', default=100, type=int, help='number of epoch in training')
     parser.add_argument('--learning_rate', default=0.001, type=float, help='learning rate in training')
     parser.add_argument('--num_point', type=int, default=1024, help='Point Number')
     parser.add_argument('--optimizer', type=str, default='Adam', help='optimizer for training')
@@ -120,7 +119,7 @@ def main(args):
     data_path = 'data/preprocessed_datasets/'
     train_dataset = LineRapidDataset.from_directory(os.path.join(data_path, 'train'), max_size=None)
     val_dataset = LineRapidDataset.from_directory(os.path.join(data_path, 'val'), max_size=None)
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=10, drop_last=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=2, drop_last=True)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=10)
 
     print(f'Loaded datasets. Train length: {len(train_dataset)}, val length: {len(val_dataset)}')
@@ -160,7 +159,7 @@ def main(args):
     else:
         optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
 
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.7)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.7)
     global_epoch = 0
     global_step = 0
     best_loss = np.inf

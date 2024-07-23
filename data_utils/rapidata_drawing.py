@@ -11,8 +11,9 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 import numpy as np
+from scipy.spatial import distance
 
-POINTS_PER_RAPID = 1024
+POINTS_PER_RAPID = 512
 POINTS_DIM = 3
 
 
@@ -121,6 +122,30 @@ def pad_or_clip_list(points: List[Tuple[float, float]], target_length: int, pad_
     return points
 
 
+
+def clean_points(points: List[List[float]], ratio=0.3) -> List[Tuple[float, float]]:
+
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+
+    median_x, median_y = np.median(xs), np.median(ys)
+
+    distances = [distance.euclidean(p, (median_x, median_y)) for p in points]
+
+    points_with_distances = list(zip(points, distances))
+
+    points_with_distances = sorted(points_with_distances, key=lambda x: x[1])
+
+    num_points_to_keep = int(len(points) * (1 - ratio))
+
+    cleaned_points = [p[0] for p in points_with_distances[:num_points_to_keep]]
+
+    desired_length = int((1-ratio)*len(points))
+
+    assert np.array(cleaned_points).shape == (desired_length, 2)
+    return cleaned_points
+
+
 def read_points_from_guesses(workflow_sessions_json: str) -> Dict[str, np.ndarray]:
     with open(workflow_sessions_json, 'r') as f:
         sessions = json.load(f)
@@ -137,13 +162,15 @@ def read_points_from_guesses(workflow_sessions_json: str) -> Dict[str, np.ndarra
 
     rapid_id_to_points = dict()
     for rapid_id, collected_points in rapid_guesses.items():
-        points = pad_or_clip_list(collected_points, target_length=POINTS_PER_RAPID, pad_value=collected_points[0])
+        cleaned_points = clean_points(collected_points, ratio=0.3)
+
+        points = pad_or_clip_list(cleaned_points, target_length=POINTS_PER_RAPID, pad_value=collected_points[0])
 
         points = np.array(points)
         points = points-0.5 # shift to origo
 
         if POINTS_DIM == 3:
-            z_coords = np.random.uniform(low=-0.1, high=0.1, size=points.shape[0]).reshape(-1, 1)
+            z_coords = np.random.uniform(low=-0.05, high=0.05, size=points.shape[0]).reshape(-1, 1)
             points = np.hstack((points, z_coords))
         rapid_id_to_points[rapid_id] = points
 
