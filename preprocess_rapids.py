@@ -1,84 +1,115 @@
 import os
+from typing import List, Tuple
 
+import dotenv
 import numpy as np
-import torch.utils.data
+import pandas as pd
 from tqdm import tqdm
 
-from data_utils.rapidata_drawing import read_grountruths_under_folder, read_points_from_guesses, \
-    read_labels_for_rapids, LineRapidDataset, POINTS_PER_RAPID, POINTS_DIM
+from rapidata.services import ClickHouse, RapidataApi, COCOBoxService
+from rapidata.utils import LineRapidResult, Point, RelativeCocoBox
 
-EXPORTED_WORKFLOWS_DIR = '/home/ubuntu/Pointnet_Pointnet2_pytorch/data/exported_sessions'
 PROMPT_CLASS_REGEX = 'Paint the (.*?) with your finger! Be accurate!'
 OUTPUT_DIRECTORY_ROOT = os.path.join('data', 'preprocessed_datasets')
-COCO_ROOT = '/home/ubuntu/Pointnet_Pointnet2_pytorch/data/coco'
+
+def dump_to_txt(points: List[Point], colors: List[Tuple[int, int , int]], file_path: str):
+    assert len(points) == len(colors)
+
+    with open(file_path, 'w+') as f:
+        for point_idx, (x, y, z) in enumerate(points):
+            r, g, b = colors[point_idx]
+            line = f'{x} {y} {z} {r} {g} {b}\n'
+            f.write(line)
 
 
-def load_dataset(split: str):
-    folder = os.path.join(EXPORTED_WORKFLOWS_DIR, split)
-    ground_truths = read_grountruths_under_folder(COCO_ROOT, split)
+def linear_interpolation(point1: Point, point2: Point, num_points=10) -> List[Point]:
+    px, py, _ = point1
+    prevx, prevy, _ = point2
 
-    output_directory = os.path.join(OUTPUT_DIRECTORY_ROOT, split)
-    os.makedirs(output_directory, exist_ok=True)
+    t_values = np.linspace(0, 1, num_points)
 
-    all_points = []
-    all_labels = []
-    all_filenames = []
-    all_rapid_ids = []
-    all_classnames = []
-    n_rapids_total = 0
-    for file in tqdm(os.listdir(folder)):
-        workflow_guesses_path = os.path.join(folder, file)
+    interpolated_x = prevx + t_values * (px - prevx)
+    interpolated_y = prevy + t_values * (py - prevy)
 
-        points_per_rapid = read_points_from_guesses(workflow_guesses_path)
-        rapid_ids = list(points_per_rapid.keys())
-        all_rapid_ids += rapid_ids
-        n_rapids_total += len(rapid_ids)
-        labels, original_filenames, classnames = read_labels_for_rapids(workflow_guesses_path, rapid_ids, ground_truths, PROMPT_CLASS_REGEX)
-        all_classnames += classnames
-        points = [points_per_rapid[rid] for rid in rapid_ids]
-        all_filenames += original_filenames
+    interpolated_points = [Point(x,y) for x,y in zip(interpolated_x, interpolated_y)]
 
-        assert all(point.shape == (POINTS_PER_RAPID, POINTS_DIM) for point in points), 'AYYAYYAY not uniform shape aaa'
-        assert len(labels) == len(points), 'This just doesnt feel right'
+    return interpolated_points
 
-        all_points += points
-        all_labels += labels
-
-    all_points = np.stack(all_points, axis=0)
-    all_labels = np.stack(all_labels, axis=0)
-    all_filenames = np.array(all_filenames)
-    all_rapid_ids = np.array(all_rapid_ids)
-    all_classnames = np.array(all_classnames)
-
-    assert all_points.shape == (n_rapids_total, POINTS_PER_RAPID, POINTS_DIM), f'oyyoyoy, {all_points.shape}'
-    assert all_labels.shape == (n_rapids_total, 4), f'4 is a better number {all_labels.shape}'
-    assert all_labels.shape[0] == len(all_filenames)
-
-    dataset = LineRapidDataset(all_points, all_labels, all_filenames, all_rapid_ids, all_classnames).to_directory(output_directory)
-
-    print(f'Created dataset from {all_points.shape[0]} rapids for split {split}. Points shape {all_points.shape}, Labels shape {all_labels.shape}')
-
-    if POINTS_DIM == 3:
-        n_zeros = np.sum(np.all(all_points == [0, 0, 0], axis=-1))
-    else:
-        n_zeros = np.sum(np.all(all_points == [0, 0], axis=-1))
-
-    print(f'Found {n_zeros} all-zero points out of {np.prod(all_points.shape[:-1])} points in split {split} ({round(n_zeros/np.prod(all_points.shape[:-1])*100,2)}%)')
+def upsample_line(points: List[Point]) -> List[Point]:
+    upsampled_points = []
+    prev = points[0]
+    for point in points[1:]:
+        upsampled_points += linear_interpolation(prev, point)
+    return points
 
 
-    return dataset
+def point_is_in_bbox2d(point: Point, box: RelativeCocoBox) -> bool:
+    x, y, _ = point
+    return box.x <= x <= box.x+box.w and box.y <= y <= box.y+box.h
 
+
+
+def create_scenes(rapids: List[LineRapidResult], output_folder: str):
+    os.makedirs(output_folder, exist_ok=True)
+
+    for rapid in rapids:
+        rapid_folder = os.path.join(output_folder, rapid.rapid.rapid_id)
+        os.makedirs(rapid_folder, exist_ok=True)
+
+        in_box_points = []
+        in_box_colors = []
+
+        out_box_points = []
+        out_box_colors = []
+
+        for line in rapid.selected_lines:
+            user_score = line.user_score
+            user_score_color = [user_score, user_score, user_score]
+            upsampled_points = upsample_line(line.points)
+            gt_box = rapid.rapid.ground_truth
+            good_points = [(p.x, p.y, p.z) for p in upsampled_points if point_is_in_bbox2d(p, gt_box)]
+            bad_points = [(p.x, p.y, p.z) for p in upsampled_points if not point_is_in_bbox2d(p, gt_box)]
+
+            in_box_points += good_points
+            in_box_colors += len(good_points) * [user_score_color]
+
+            out_box_points += bad_points
+            out_box_colors += len(bad_points) * [user_score_color]
+
+
+        annotations_folder = os.path.join(rapid_folder, 'Annotations')
+        os.makedirs(annotations_folder, exist_ok=True)
+        dump_to_txt(in_box_points, in_box_colors, file_path=os.path.join(annotations_folder, 'good_1.txt'))
+        dump_to_txt(out_box_points, out_box_colors, file_path=os.path.join(annotations_folder, 'bad_1.txt'))
+
+        dump_to_txt(in_box_points+out_box_points, in_box_colors+out_box_colors,
+                    file_path=os.path.join(rapid_folder, f'{rapid.rapid.rapid_id}.txt' ))
+
+        labels = np.expand_dims(np.array([0]*len(in_box_points) + [0]*len(out_box_points)), -1)
+        points = np.array(in_box_points+out_box_points)
+        colors = np.array(in_box_colors+out_box_colors)
+        arr = np.concatenate([points, colors, labels], axis=-1)
+        np.save(os.path.join(rapid_folder, 'points.npy'), arr)
 
 
 def main():
-    val_dataset = load_dataset('val')
-    train_dataset = load_dataset('train')
+    dotenv.load_dotenv()
+    os.makedirs(OUTPUT_DIRECTORY_ROOT, exist_ok=True)
+    api = RapidataApi()
+    gt_service = COCOBoxService()
+    clickhouse = ClickHouse(api, gt_service)
 
-    print(len(train_dataset), len(val_dataset))
+    train_workflows = pd.read_csv(os.environ['BIG_TRAIN_WORKFLOWS_CSV']).workflowId.tolist()
+    test_workflows = pd.read_csv(os.environ['BIG_VAL_WORKFLOWS_CSV']).workflowId.tolist()
 
-    val_dataset = LineRapidDataset.from_directory(os.path.join(OUTPUT_DIRECTORY_ROOT, 'val'))
-    train_dataset = LineRapidDataset.from_directory(os.path.join(OUTPUT_DIRECTORY_ROOT, 'train'))
-    print(len(train_dataset), len(val_dataset))
+    for split, workflows in zip(['train', 'test'], [train_workflows, test_workflows]):
+        for workflow in tqdm(workflows, desc=f'Creating {split} split..'):
+            rapids = clickhouse.get_line_rapid_results(workflow, PROMPT_CLASS_REGEX)
+            workflow_folder = os.path.join(OUTPUT_DIRECTORY_ROOT, workflow)
+
+            os.makedirs(workflow_folder, exist_ok=True)
+            create_scenes(rapids, str(workflow_folder))
+
 
 if __name__ == '__main__':
     main()

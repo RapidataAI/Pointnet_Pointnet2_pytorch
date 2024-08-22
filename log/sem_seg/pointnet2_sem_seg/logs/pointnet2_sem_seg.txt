@@ -1029,3 +1029,59 @@ class clutter        weight: 0.011, IoU: 0.409
 2021-03-23 12:47:10,783 - Model - INFO - Best mIoU: 0.526403
 2021-03-23 12:47:10,783 - Model - INFO - **** Epoch 33 (36/128) ****
 2021-03-23 12:47:10,783 - Model - INFO - Learning rate:0.000343
+2024-08-22 09:20:53,997 - Model - INFO - PARAMETER ...
+2024-08-22 09:20:53,998 - Model - INFO - Namespace(model='pointnet2_sem_seg', batch_size=16, epoch=32, learning_rate=0.001, gpu='0', optimizer='Adam', log_dir='pointnet2_sem_seg', decay_rate=0.0001, npoint=4096, step_size=10, lr_decay=0.7, test_area=5)
+2024-08-22 09:21:32,771 - Model - INFO - PARAMETER ...
+2024-08-22 09:21:32,771 - Model - INFO - Namespace(model='pointnet2_sem_seg', batch_size=16, epoch=32, learning_rate=0.001, gpu='0', optimizer='Adam', log_dir='pointnet2_sem_seg', decay_rate=0.0001, npoint=4096, step_size=10, lr_decay=0.7, test_area=5)
+2024-08-22 09:24:47,185 - Model - INFO - PARAMETER ...
+2024-08-22 09:24:47,186 - Model - INFO - Namespace(model='pointnet2_sem_seg', batch_size=16, epoch=32, learning_rate=0.001, gpu='0', optimizer='Adam', log_dir='pointnet2_sem_seg', decay_rate=0.0001, npoint=4096, step_size=10, lr_decay=0.7, test_area=5)
+2024-08-22 09:25:23,722 - Model - INFO - PARAMETER ...
+2024-08-22 09:25:23,722 - Model - INFO - Namespace(model='pointnet2_sem_seg', batch_size=16, epoch=2, learning_rate=0.001, gpu='0', optimizer='Adam', log_dir='pointnet2_sem_seg', decay_rate=0.0001, npoint=1024, step_size=10, lr_decay=0.7, test_area=5)
+2024-08-22 12:06:55,386 - Model - INFO - PARAMETER ...
+2024-08-22 12:06:55,387 - Model - INFO - Namespace(model='pointnet2_sem_seg', batch_size=16, epoch=2, learning_rate=0.001, gpu='0', optimizer='Adam', log_dir='pointnet2_sem_seg', decay_rate=0.0001, npoint=1024, step_size=10, lr_decay=0.7, test_area=5)
+2024-08-22 12:17:05,595 - Model - INFO - PARAMETER ...
+2024-08-22 12:17:05,596 - Model - INFO - Namespace(model='pointnet2_sem_seg', batch_size=16, epoch=2, learning_rate=0.001, gpu='0', optimizer='Adam', log_dir='pointnet2_sem_seg', decay_rate=0.0001, npoint=1024, step_size=10, lr_decay=0.7, test_area=5)
+2024-08-22 12:17:06,646 - Model - INFO - The number of training data is: 1631
+2024-08-22 12:17:06,646 - Model - INFO - The number of test data is: 332
+2024-08-22 12:17:06,868 - Model - INFO - No existing model, starting training from scratch...
+2024-08-22 12:17:07,727 - Model - INFO - **** Epoch 1 (1/2) ****
+2024-08-22 12:17:07,727 - Model - INFO - Learning rate:0.001000
+2024-08-22 12:17:57,615 - Model - INFO - Training mean loss: 0.140002
+2024-08-22 12:17:57,616 - Model - INFO - Training accuracy: 0.954754
+2024-08-22 12:17:57,616 - Model - INFO - Save model...
+2024-08-22 12:17:57,616 - Model - INFO - Saving at log/sem_seg/pointnet2_sem_seg/checkpoints/model.pth
+2024-08-22 12:17:57,657 - Model - INFO - Saving model....
+2024-08-22 12:17:57,665 - Model - INFO - ---- EPOCH 001 EVALUATION ----
+2024-08-22 12:18:09,971 - Model - INFO - eval mean loss: 0.011634
+2024-08-22 12:18:09,971 - Model - INFO - eval point avg class IoU: 0.500000
+2024-08-22 12:18:09,971 - Model - INFO - eval point accuracy: 1.000000
+2024-08-22 12:18:09,971 - Model - INFO - eval point avg class acc: 0.500000
+2024-08-22 12:18:09,971 - Model - INFO - ------- IoU --------
+class ceiling        weight: 0.000, IoU: 1.000 
+class floor          weight: 1.000, IoU: nan 
+
+2024-08-22 12:18:09,972 - Model - INFO - Eval mean loss: 0.011634
+2024-08-22 12:18:09,972 - Model - INFO - Eval accuracy: 1.000000
+2024-08-22 12:18:09,972 - Model - INFO - Save model...
+2024-08-22 12:18:09,972 - Model - INFO - Saving at log/sem_seg/pointnet2_sem_seg/checkpoints/best_model.pth
+2024-08-22 12:18:10,038 - Model - INFO - Saving model....
+2024-08-22 12:18:10,038 - Model - INFO - Best mIoU: 0.500000
+2024-08-22 12:18:10,038 - Model - INFO - **** Epoch 2 (2/2) ****
+2024-08-22 12:18:10,038 - Model - INFO - Learning rate:0.001000
+2024-08-22 12:18:57,701 - Model - INFO - Training mean loss: 0.008663
+2024-08-22 12:18:57,702 - Model - INFO - Training accuracy: 1.000000
+2024-08-22 12:18:57,710 - Model - INFO - ---- EPOCH 002 EVALUATION ----
+2024-08-22 12:19:09,146 - Model - INFO - eval mean loss: 0.004613
+2024-08-22 12:19:09,147 - Model - INFO - eval point avg class IoU: 0.500000
+2024-08-22 12:19:09,147 - Model - INFO - eval point accuracy: 1.000000
+2024-08-22 12:19:09,147 - Model - INFO - eval point avg class acc: 0.500000
+2024-08-22 12:19:09,148 - Model - INFO - ------- IoU --------
+class ceiling        weight: 0.000, IoU: 1.000 
+class floor          weight: 1.000, IoU: nan 
+
+2024-08-22 12:19:09,150 - Model - INFO - Eval mean loss: 0.004613
+2024-08-22 12:19:09,150 - Model - INFO - Eval accuracy: 1.000000
+2024-08-22 12:19:09,150 - Model - INFO - Save model...
+2024-08-22 12:19:09,150 - Model - INFO - Saving at log/sem_seg/pointnet2_sem_seg/checkpoints/best_model.pth
+2024-08-22 12:19:09,230 - Model - INFO - Saving model....
+2024-08-22 12:19:09,230 - Model - INFO - Best mIoU: 0.500000

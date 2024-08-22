@@ -1,9 +1,10 @@
 import os
+from typing import List
+
 import numpy as np
 
 from tqdm import tqdm
 from torch.utils.data import Dataset
-
 
 class S3DISDataset(Dataset):
     def __init__(self, split='train', data_root='trainval_fullarea', num_point=4096, test_area=5, block_size=1.0, sample_rate=1.0, transform=None):
@@ -29,10 +30,6 @@ class S3DISDataset(Dataset):
             points, labels = room_data[:, 0:6], room_data[:, 6]  # xyzrgb, N*6; l, N
             tmp, _ = np.histogram(labels, range(14))
             labelweights += tmp
-            coord_min, coord_max = np.amin(points, axis=0)[:3], np.amax(points, axis=0)[:3]
-            self.room_points.append(points), self.room_labels.append(labels)
-            self.room_coord_min.append(coord_min), self.room_coord_max.append(coord_max)
-            num_point_all.append(labels.size)
         labelweights = labelweights.astype(np.float32)
         labelweights = labelweights / np.sum(labelweights)
         self.labelweights = np.power(np.amax(labelweights) / labelweights, 1 / 3.0)
@@ -192,3 +189,57 @@ if __name__ == '__main__':
         for i, (input, target) in enumerate(train_loader):
             print('time: {}/{}--{}'.format(i+1, len(train_loader), time.time() - end))
             end = time.time()
+
+
+class LineRapidDataset(Dataset):
+
+
+    def __init__(self, base_folder: str, dataset_workflows: List[str], num_points=1024):
+        self.num_points = num_points
+        self.all_rapids = []
+        self.all_x = []
+        self.all_y = []
+        for workflow in dataset_workflows:
+            rapids = os.listdir(os.path.join(base_folder, workflow))
+            self.all_rapids += rapids
+
+            arrays = [np.load(os.path.join(base_folder, workflow, rapid, 'points.npy')) for rapid in rapids]
+            self.all_x += [arr[:, :6] for arr in arrays]
+            self.all_y += [arr[:, 6:] for arr in arrays]
+
+
+        labelweights = np.array([0.5, 0.5])
+        self.labelweights = np.power(np.amax(labelweights) / labelweights, 1 / 3.0)
+
+    def __len__(self):
+        return len(self.all_x)
+
+
+    def __getitem__(self, idx):
+        points = self.all_x[idx]   # N * 6
+        labels = self.all_y[idx]   # N
+        indices = list(range(len(points)))
+        if len(points) >= self.num_points:
+            selected_point_idxs = np.random.choice(indices, self.num_points, replace=False)
+        else:
+            selected_point_idxs = np.random.choice(indices, self.num_points, replace=True)
+
+        selected_points = points[selected_point_idxs, :]  # num_point * 6
+        current_points = np.zeros((self.num_points, 9))  # num_point * 9
+        current_points[:, 6] = selected_points[:, 0] / 1.0 #self.room_coord_max[room_idx][0]
+        current_points[:, 7] = selected_points[:, 1] / 1.0 #self.room_coord_max[room_idx][1]
+        current_points[:, 8] = selected_points[:, 2] / 1.0 #self.room_coord_max[room_idx][2]
+        selected_points[:, 0] = selected_points[:, 0] - 0.0#center[0]
+        selected_points[:, 1] = selected_points[:, 1] - 0.0#center[1]
+        selected_points[:, 3:6] /= 1.0 #255.0
+        current_points[:, 0:6] = selected_points
+
+        current_labels = labels[selected_point_idxs].squeeze(-1)
+
+        assert selected_points.shape == (self.num_points, 6)
+        assert current_labels.shape == (self.num_points, )
+
+        return current_points, current_labels
+
+
+
