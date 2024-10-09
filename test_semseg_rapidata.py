@@ -4,7 +4,7 @@ Date: Nov 2019
 """
 import argparse
 import os
-
+import matplotlib.pyplot as plt
 import pandas as pd
 from flask.cli import load_dotenv
 
@@ -23,8 +23,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = BASE_DIR
 sys.path.append(os.path.join(ROOT_DIR, 'models'))
 
-classes = ['ceiling', 'floor', 'wall', 'beam', 'column', 'window', 'door', 'table', 'chair', 'sofa', 'bookcase',
-           'board', 'clutter']
+classes = ['IN!!!', 'VeryOut:(']
 class2label = {cls: i for i, cls in enumerate(classes)}
 seg_classes = class2label
 seg_label_to_cat = {}
@@ -38,7 +37,7 @@ def parse_args():
     parser.add_argument('--batch_size', type=int, default=32, help='batch size in testing [default: 32]')
     parser.add_argument('--gpu', type=str, default='0', help='specify gpu device')
     parser.add_argument('--num_point', type=int, default=1024, help='point number [default: 4096]')
-    parser.add_argument('--log_dir', type=str, required=False, default='2024-08-22_12-19', help='experiment root')
+    parser.add_argument('--log_dir', type=str, required=False, default='2024-08-27_08-44', help='experiment root')
     parser.add_argument('--visual', action='store_true', default=False, help='visualize result [default: False]')
     parser.add_argument('--test_area', type=int, default=5, help='area for testing, option: 1-6 [default: 5]')
     parser.add_argument('--num_votes', type=int, default=3, help='aggregate segmentation scores with voting [default: 5]')
@@ -96,86 +95,46 @@ def main(args):
     checkpoint = torch.load(str(experiment_dir) + '/checkpoints/best_model.pth')
     classifier.load_state_dict(checkpoint['model_state_dict'])
     classifier = classifier.eval()
-
+    os.makedirs('eval_viz', exist_ok=True)
+    test_loader = torch.utils.data.DataLoader(TEST_DATASET, batch_size=BATCH_SIZE, shuffle=False, drop_last=False)
     with torch.no_grad():
-        rapid_ids = TEST_DATASET.all_rapids
 
 
-        for idx, rapid_id in enumerate(rapid_ids):
-            idx=166
-            points, target = TEST_DATASET[idx]
-            #points[:, :, :3] = provider.rotate_point_cloud_z(points[:, :, :3])
-            points = torch.Tensor(points)
-            target = torch.Tensor(target)
-            points, target = points.float().cuda(), target.long().cuda()
-            print(points.shape)
-            points = points.unsqueeze(0)
-            points = points.transpose(2, 1)
+        rapid_counter = 0
+        for i, (data_points, target) in tqdm(enumerate(test_loader), total=len(test_loader), smoothing=0.9):
+            og_target = target.cpu().numpy()
+            preds = np.zeros_like(target)
+            for _ in range(args.num_votes):
+                points = data_points.data.numpy()
+                points[:, :, :3] = provider.rotate_point_cloud_z(points[:, :, :3])
+                points = torch.Tensor(points)
+                points, target = points.float().cuda(), target.long().cuda()
+                points = points.transpose(2, 1)
+                seg_pred, trans_feat = classifier(points)
+                pred_choice = seg_pred.cpu().data.max(-1)[1].numpy()
 
-            seg_pred, _ = classifier(points)
-            import matplotlib.pyplot as plt
-            from collections import Counter
-            print(Counter(target.cpu().numpy().tolist()))
-            plt.scatter(points[:,0].cpu().numpy(), points[:,1].cpu().numpy(), c=target.cpu().numpy())
-            plt.title(rapid_id)
-            plt.savefig('points.png')
-            print(seg_pred.shape)
-            exit()
-            batch_pred_label = seg_pred.contiguous().cpu().data.max(2)[1].numpy()
+                preds += pred_choice
 
-            vote_label_pool = add_vote(vote_label_pool, batch_point_index[0:real_batch_size, ...],
-                                       batch_pred_label[0:real_batch_size, ...],
-                                       batch_smpw[0:real_batch_size, ...])
+            preds /= args.num_votes
 
-            pred_label = np.argmax(vote_label_pool, 1)
+            points = data_points.data.numpy()
+            for sample_idx  in range(len(preds)):
+                fig, axes = plt.subplots(nrows=2)
+                x = points[sample_idx, :, 0]
+                y = points[sample_idx, :, 1]
+                rapid_id = TEST_DATASET.all_rapids[rapid_counter]
+                axes[0].scatter(x, y, c=og_target[sample_idx], s=1)
+                axes[0].set_title('GT')
+                axes[1].set_title('PRED')
+                axes[1].set_box_aspect(1)
+                axes[0].set_box_aspect(1)
+                axes[1].scatter(x, y, c=np.round(preds[sample_idx]), s=1)
+                plt.title(rapid_id)
+                plt.tight_layout()
+                plt.savefig(os.path.join('eval_viz', f'point_preds_{rapid_id}.png'))
+                plt.close()
+                rapid_counter += 1
 
-            for l in range(NUM_CLASSES):
-                total_seen_class_tmp[l] += np.sum((whole_scene_label == l))
-                total_correct_class_tmp[l] += np.sum((pred_label == l) & (whole_scene_label == l))
-                total_iou_deno_class_tmp[l] += np.sum(((pred_label == l) | (whole_scene_label == l)))
-                total_seen_class[l] += total_seen_class_tmp[l]
-                total_correct_class[l] += total_correct_class_tmp[l]
-                total_iou_deno_class[l] += total_iou_deno_class_tmp[l]
-
-            iou_map = np.array(total_correct_class_tmp) / (np.array(total_iou_deno_class_tmp, dtype=np.float) + 1e-6)
-            print(iou_map)
-            arr = np.array(total_seen_class_tmp)
-            tmp_iou = np.mean(iou_map[arr != 0])
-            log_string('Mean IoU of %s: %.4f' % (scene_id[batch_idx], tmp_iou))
-            print('----------------------------')
-
-            filename = os.path.join(visual_dir, scene_id[batch_idx] + '.txt')
-            with open(filename, 'w') as pl_save:
-                for i in pred_label:
-                    pl_save.write(str(int(i)) + '\n')
-                pl_save.close()
-            for i in range(whole_scene_label.shape[0]):
-                color = g_label2color[pred_label[i]]
-                color_gt = g_label2color[whole_scene_label[i]]
-                if args.visual:
-                    fout.write('v %f %f %f %d %d %d\n' % (
-                        whole_scene_data[i, 0], whole_scene_data[i, 1], whole_scene_data[i, 2], color[0], color[1],
-                        color[2]))
-                    fout_gt.write(
-                        'v %f %f %f %d %d %d\n' % (
-                            whole_scene_data[i, 0], whole_scene_data[i, 1], whole_scene_data[i, 2], color_gt[0],
-                            color_gt[1], color_gt[2]))
-            if args.visual:
-                fout.close()
-                fout_gt.close()
-
-        IoU = np.array(total_correct_class) / (np.array(total_iou_deno_class, dtype=np.float) + 1e-6)
-        iou_per_class_str = '------- IoU --------\n'
-        for l in range(NUM_CLASSES):
-            iou_per_class_str += 'class %s, IoU: %.3f \n' % (
-                seg_label_to_cat[l] + ' ' * (14 - len(seg_label_to_cat[l])),
-                total_correct_class[l] / float(total_iou_deno_class[l]))
-        log_string(iou_per_class_str)
-        log_string('eval point avg class IoU: %f' % np.mean(IoU))
-        log_string('eval whole scene point avg class acc: %f' % (
-            np.mean(np.array(total_correct_class) / (np.array(total_seen_class, dtype=np.float) + 1e-6))))
-        log_string('eval whole scene point accuracy: %f' % (
-                np.sum(total_correct_class) / float(np.sum(total_seen_class) + 1e-6)))
 
         print("Done!")
 

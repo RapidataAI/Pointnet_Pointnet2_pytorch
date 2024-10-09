@@ -1,3 +1,4 @@
+import itertools
 import os
 from typing import List
 
@@ -33,7 +34,6 @@ class S3DISDataset(Dataset):
         labelweights = labelweights.astype(np.float32)
         labelweights = labelweights / np.sum(labelweights)
         self.labelweights = np.power(np.amax(labelweights) / labelweights, 1 / 3.0)
-        print(self.labelweights)
         sample_prob = num_point_all / np.sum(num_point_all)
         num_iter = int(np.sum(num_point_all) * sample_rate / num_point)
         room_idxs = []
@@ -199,6 +199,9 @@ class LineRapidDataset(Dataset):
         self.all_rapids = []
         self.all_x = []
         self.all_y = []
+
+
+        labelweights = np.zeros(shape=(2,))
         for workflow in dataset_workflows:
             rapids = os.listdir(os.path.join(base_folder, workflow))
             self.all_rapids += rapids
@@ -207,9 +210,13 @@ class LineRapidDataset(Dataset):
             self.all_x += [arr[:, :6] for arr in arrays]
             self.all_y += [arr[:, 6:] for arr in arrays]
 
+            frequencies, _= np.histogram(list(itertools.chain(*[arr[:, 6:].flatten().tolist() for arr in arrays])), range(3))
+            labelweights += frequencies
 
-        labelweights = np.array([0.5, 0.5])
+        labelweights = labelweights.astype(np.float32)
+        labelweights = labelweights / np.sum(labelweights)
         self.labelweights = np.power(np.amax(labelweights) / labelweights, 1 / 3.0)
+        print('label weights', self.labelweights)
 
     def __len__(self):
         return len(self.all_x)
@@ -240,6 +247,7 @@ class LineRapidDataset(Dataset):
         assert current_labels.shape == (self.num_points, )
 
         return current_points, current_labels
+
 
 
 
