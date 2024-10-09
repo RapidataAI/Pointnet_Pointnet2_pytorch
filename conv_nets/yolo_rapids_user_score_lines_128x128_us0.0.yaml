@@ -1,0 +1,7 @@
+path: ../datasets/yolo_rapids_user_score_lines_128x128_us0.0
+train: images/train
+val: images/inference
+test:
+
+names:
+  0: anything

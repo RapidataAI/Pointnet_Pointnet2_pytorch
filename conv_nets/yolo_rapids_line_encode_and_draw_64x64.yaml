@@ -1,0 +1,7 @@
+path: ../datasets/yolo_rapids_line_encode_and_draw_64x64
+train: images/train
+val: images/inference
+test:
+
+names:
+  0: anything

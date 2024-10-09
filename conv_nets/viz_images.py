@@ -1,6 +1,8 @@
 import os
 import random
 from pathlib import Path
+from typing import List
+
 import matplotlib
 import glob
 
@@ -10,7 +12,7 @@ import pandas as pd
 import numpy as np
 from PIL import Image
 
-dataset_path = '/home/ubuntu/Pointnet_Pointnet2_pytorch/conv_nets/datasets/yolo_rapids_line_encode'
+dataset_path = '/home/ubuntu/Pointnet_Pointnet2_pytorch/conv_nets/datasets/yolo_rapids_user_score_lines_128x128_us0.0'
 coco_path = '/home/ubuntu/Pointnet_Pointnet2_pytorch/data/coco'
 
 
@@ -40,20 +42,24 @@ def main():
     fig, axs = plt.subplots(3, 3, figsize=(15, 15))
     fig.tight_layout(pad=3.0)
 
-    images_dir = os.listdir(os.path.join(dataset_path, 'images', 'val'))
+    images_dir = os.listdir(os.path.join(dataset_path, 'images', 'inference'))
 
     metadata_path = os.path.join(dataset_path, 'metadata')
     metadata_df = read_metadatas(metadata_path)
+    sampled_images = random.sample(images_dir, 9)
 
-    for ax, image_name in zip(axs.flatten(), random.sample(images_dir, 9)):
-        image_path = os.path.join(dataset_path, 'images', 'val', image_name)
+    sampled_images[0] = '668be69c690d2839547f8e51.png'
+    sampled_images[1] = '668bec6bcc23b57bc10a4d50.png'
+    for ax, image_name in zip(axs.flatten(), sampled_images):
+
+        image_path = os.path.join(dataset_path, 'images', 'inference', image_name)
 
         generated_image = Image.open(image_path)
         generated_image = generated_image.convert("RGB")
         generated_image_array = np.array(generated_image)
 
         label_filename = Path(image_name).stem + '.txt'
-        label_path = os.path.join(dataset_path, 'labels', 'val', label_filename)
+        label_path = os.path.join(dataset_path, 'labels', 'inference', label_filename)
 
         metadata = metadata_df[(metadata_df.rapid_ids == Path(image_name).stem)]
         assert len(metadata) == 1

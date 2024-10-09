@@ -18,15 +18,16 @@ import matplotlib.pyplot as plt
 import itertools
 
 
-YOLO_VAL_FOLDER = '/home/ubuntu/Pointnet_Pointnet2_pytorch/conv_nets/datasets/yolo_rapids_line_encode/images/val'
+YOLO_VAL_FOLDER = '/home/ubuntu/Pointnet_Pointnet2_pytorch/conv_nets/datasets/yolo_rapids_user_score_lines_128x128_us0.0/images/val'
 METADATA_FOLDER = '/home/ubuntu/Pointnet_Pointnet2_pytorch/conv_nets/datasets/metadata'
-MODEL = YOLO("/home/ubuntu/Pointnet_Pointnet2_pytorch/conv_nets/yolo_rapids_line_encode/first_good/weights/best.pt")
+MODEL = YOLO("/home/ubuntu/Pointnet_Pointnet2_pytorch/conv_nets/Points2BBox/user_score_lines_128_pretrained/weights/best.pt")
 COCO_PATH = '/home/ubuntu/Pointnet_Pointnet2_pytorch/data/coco'
 BATCH_SIZE = 32
+IMAGE_SIZE = 128
+CONF=0.0
 METADATA_DF = (pd.concat(pd.read_csv(os.path.join(METADATA_FOLDER, file)) for file in os.listdir(METADATA_FOLDER))
                .reset_index(drop=True).drop(columns='Unnamed: 0'))
-OUTPUT_FOLDER = 'eval_results'
-
+OUTPUT_FOLDER = f'eval_results_{CONF}_{IMAGE_SIZE}'
 
 # Calculate IoU function
 def calculate_iou(box1, box2):
@@ -76,16 +77,24 @@ def main():
 
     images = sorted(os.listdir(YOLO_VAL_FOLDER))
     all_ious = []
+    all_class_names = []
+    all_gts = []
+    filenames = []
+    all_rapid_ids = []
+    gt_relative_size = []
+    all_confs = []
     for batch_idx, batch in enumerate(tqdm(batched(images, BATCH_SIZE),
                                            total=int(math.ceil(len(images)/BATCH_SIZE)))):
 
-        full_paths = [os.path.join(YOLO_VAL_FOLDER, file) for file in batch]
+        full_paths = [os.path.join(YOLO_VAL_FOLDER, file) for file in batch ]
         rapid_ids = [Path(file).stem for file in batch]
-        results = MODEL(full_paths)
+        results = MODEL.predict(full_paths, conf=CONF, imgsz=IMAGE_SIZE)
 
         for result_index, result in enumerate(results):
 
             og_image_filename, class_name, yolo_gt = get_label_for_rapid(rapid_ids[result_index])
+            all_rapid_ids.append(rapid_ids[result_index])
+            filenames.append(og_image_filename)
             original_image = read_original_image(og_image_filename)
             model_input_image = read_input_image(batch[result_index])
             original_image_resized = original_image.resize(model_input_image.size)
@@ -105,8 +114,24 @@ def main():
             xyxyn_boxes = [box.cpu().numpy().tolist() for box in boxes.xywhn]
             confs = [box.conf.item() for box in boxes]
 
+
+            x_center, y_center, gt_width, gt_height = yolo_gt
+            all_gts.append([x_center-gt_width/2, y_center-gt_height/2, gt_width, gt_height])
+
+            gt_x = (x_center - gt_width / 2) * original_image_array.shape[1]
+            gt_y = (y_center - gt_height / 2) * original_image_array.shape[0]
+            gt_width *= original_image_array.shape[1]
+            gt_height *= original_image_array.shape[0]
+
+            rect = patches.Rectangle((gt_x, gt_y), gt_width, gt_height, linewidth=1, edgecolor='g', facecolor='none',
+                                     label='True')
+            axes[0].add_patch(rect)
+
+            all_class_names.append(class_name)
+            gt_relative_size.append((gt_width*gt_height) / (original_image_array.shape[0]*original_image_array.shape[1]))
             if not xyxyn_boxes:
                 all_ious.append(-1)
+                all_confs.append(-1)
                 continue
 
             highest_conf_bbox = None
@@ -127,18 +152,10 @@ def main():
                 if box_idx == np.argmax(confs):
                     highest_conf_bbox = [x, y, width, height]
 
-            x_center, y_center, width, height = yolo_gt
-            x = (x_center - width / 2) * original_image_array.shape[1]
-            y = (y_center - height / 2) * original_image_array.shape[0]
-            width *= original_image_array.shape[1]
-            height *= original_image_array.shape[0]
-
-            rect = patches.Rectangle((x, y), width, height, linewidth=1, edgecolor='g', facecolor='none',
-                                     label='True')
-            axes[0].add_patch(rect)
-
-            iou = calculate_iou(highest_conf_bbox, (x,y, width, height))
+            iou = calculate_iou(highest_conf_bbox, (gt_x,gt_y, gt_width, gt_height))
             all_ious.append(iou)
+            all_confs.append(max(confs))
+
 
             axes[0].legend()
             plt.suptitle(class_name+ f'highest conf iou: {round(iou,2)}')
@@ -147,7 +164,20 @@ def main():
             plt.close()
 
     with open(os.path.join(OUTPUT_FOLDER, 'ious.json'), "w") as f:
-        f.write(json.dumps(all_ious))
+        f.write(
+            json.dumps(
+                {
+                    'iou': all_ious,
+                    'class_name':all_class_names,
+                    'gt_relative_size':gt_relative_size,
+                    'coco_gt': all_gts,
+                    'filenames': filenames,
+                    'rapid_ids': all_rapid_ids,
+                    'confidence': all_confs
+                }
+            )
+        )
+
 
 
 

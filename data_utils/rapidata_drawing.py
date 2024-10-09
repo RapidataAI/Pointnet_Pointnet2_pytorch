@@ -24,26 +24,28 @@ class LineRapidDataset(Dataset):
     rapid_ids_file = 'rapid_ids.npy'
     classnames_files = 'classnames.npy'
 
-    def __init__(self, points: np.ndarray, bboxes: np.ndarray, filenames: np.ndarray, rapid_ids: np.ndarray, classnames: np.ndarray):
+    def __init__(self, points: np.ndarray, bboxes: np.ndarray, filenames: np.ndarray, rapid_ids: np.ndarray, classnames: np.ndarray,
+                 only_images=False):
         # expected array: images x nPoints x POINTS_DIM
-        assert len(points) == len(bboxes) == len(filenames) == len(rapid_ids) == len(classnames)
 
         assert len(points.shape) == 3
         assert points.shape[-1] == POINTS_DIM
         self.points = points
-
-        assert len(bboxes.shape) == 2
-        assert bboxes.shape[-1] == 4
-        self.bboxes = bboxes
-
-        assert filenames.shape == (points.shape[0],)
-        self.filenames = filenames
-
         assert rapid_ids.shape == (points.shape[0],)
         self.rapid_ids = rapid_ids
 
-        assert classnames.shape == (points.shape[0], )
+        if not only_images:
+            assert len(points) == len(bboxes) == len(filenames) == len(rapid_ids) == len(classnames)
+            assert len(bboxes.shape) == 2
+            assert bboxes.shape[-1] == 4
+            assert filenames.shape == (points.shape[0],)
+            assert classnames.shape == (points.shape[0], )
+
+
+        self.bboxes = bboxes
+        self.filenames = filenames
         self.classnames = classnames
+
 
     def to_directory(self, directory: str):
         os.makedirs(directory, exist_ok=True)
@@ -77,6 +79,10 @@ class LineRapidDataset(Dataset):
 
 
 def read_grountruths_under_folder(folder: str, split: str) -> pd.DataFrame:
+
+    if split =='inference':
+        split = 'val'#assume validation labels
+
     hits = glob.glob(f'{folder}/**/{split}_all_labels.csv', recursive=True)
     assert len(hits) == 1, 'Multiple or 0 hits found for labels.csv'
 

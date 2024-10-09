@@ -1,0 +1,7 @@
+path: ../datasets/yolo_rapids_heatmap_image_128x128
+train: images/train
+val: images/inference
+test:
+
+names:
+  0: anything
